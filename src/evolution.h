@@ -1,0 +1,19 @@
+#pragma once
+#include <iostream>
+#include <fstream>
+#include <stdio.h>
+#include <stdlib.h>
+#include <ctime>
+#include <math.h>
+#include <iomanip>
+#include <functional>
+#include <map>
+#include <numeric>
+#include <cmath>
+#include <utility>
+#include "solution.h"
+#include "data.h"
+#include "config.h"
+#include "eval.h"
+#include "move.h"
+bool parallel_station_insertion(int &dimension, Route &r, Data &data, double &evolution_cost);
