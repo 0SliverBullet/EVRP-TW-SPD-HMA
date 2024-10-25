@@ -599,7 +599,7 @@ void replacement(vector<Solution> &pop, vector<tuple<int, int>> &p_indice, vecto
     }
 }
 
-// Hierarchical Search
+// Hybrid Memetic Search
 void search_framework(Data &data, Solution &best_s, int level, clock_t stime0, double update_value)
 {
     double cost_all_run = 0.0; 
