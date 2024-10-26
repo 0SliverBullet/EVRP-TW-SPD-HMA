@@ -246,7 +246,8 @@ public:
             else{  //station
             sl[i].arr_RD = sl[i-1].dep_RD - data.dist[pre_node][node];   
             if (sl[i].arr_RD < -PRECISION) {
-                //尝试换充电站
+                // If this insertion violates constraints, 
+                // we try the next highest-ranked station until a feasible insertion is found or all stations within the selection range have been attempted.
                 int flag = 4;
                 for (int k=1;k<data.station_range;k++) {
                     node = data.optimal_staion[pre_node][nl[i+1]][k];
@@ -275,7 +276,8 @@ public:
             sl[i].dep_RD = std::max(f_f0_dist,sl[i].arr_RD); 
             
             if (data.max_distance_reachable - sl[i].dep_RD < -PRECISION) { 
-                //尝试换充电站
+                // If this insertion violates constraints, 
+                // we try the next highest-ranked station until a feasible insertion is found or all stations within the selection range have been attempted.
                 int flag = 4;
                 for (int k=1;k<data.station_range;k++) {
                     node = data.optimal_staion[pre_node][nl[i+1]][k];
@@ -309,7 +311,7 @@ public:
             double max_recharge_time = (sl[i].dep_RD - sl[i].arr_RD) * data.vehicle.consumption_rate * data.vehicle.recharging_rate;
             time += data.time[pre_node][node]; 
             sl[i].arr_time = time;
-            //改进：--------------------------------------------------------------------------------
+            //--------------------------------------------------------------------------------
             double min_remain_time = double(INFINITY);
             double move_time = sl[i].arr_time + max_recharge_time; 
             j = i;
