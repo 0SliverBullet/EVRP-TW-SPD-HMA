@@ -13,7 +13,7 @@
 
 struct Point
 {
-    short id; // DC_ID: depot, otherwise: customers or stations
+    short id; // DC_ID: depot is 0, otherwise: customers or stations (not used in EVRP-TW-SPD)
     short type;  // depot = 0, customer = 1, station = 2
     double x; // x-axis coordinate
     double y; // y-axis coordinate
@@ -46,14 +46,14 @@ public:
     int node_num;
     int customer_num; // shouldn't be larger than MAX_POINT
     int station_num; // shouldn't be larger than MAX_STATION_POINT
-    int station_range;  // the number of charging stations considered
+    int station_range;  // the number of charging stations considered, i.e., sr $\in$ (0, 1], the selection range parameter.
     std::vector<std::vector<double>> dist;
     std::vector<std::vector<double>> time;
     std::vector<std::vector<double>> rm;
     std::vector<std::vector<int>> rm_argrank;
     std::vector<std::vector<bool>> pm;
-    std::vector<std::vector<std::vector<int>>> optimal_staion;  // a look-up table for the priority station selection order between each node
-    std::vector<std::vector<std::vector<int>>> hyperarc; // record the path information in hyper-edges
+    std::vector<std::vector<std::vector<int>>> optimal_staion;  // preprocess the charging stations to rank them for insertion between each pair of nodes
+    std::vector<std::vector<std::vector<int>>> hyperarc; // record information of "the shortest path in terms of travel time between every pair of nodes" to hyperarc
 
     Vehicle vehicle;
     double max_dist = 0; // max value in dist
@@ -64,10 +64,10 @@ public:
     double all_time; // all time
     double start_time; // the earliest time of servicing
     double end_time;   // the latest time of returning to depot
-    double max_distance_reachable;
+    double max_distance_reachable; // given the current battery capacity, the maximum distance that EV can reach
     
 
-    int DC; // ID of depot
+    int DC; // ID of depot, 0 by default
      
     // parameters
     bool pruning = DEFAULT_PRUNING; // whether do pruning
@@ -110,7 +110,7 @@ public:
 
     int or_opt_len = DEFAULT_OR_OPT_LEN; //max length of seqs relocated by oropt
     int exchange_len = DEFAUTL_EX_LEN;   //max length of seqs exchanged
-    int subproblem_range = DEFAULT_SUBPROBLEM;
+    int subproblem_range = DEFAULT_SUBPROBLEM; // // BCD decomposition. `subproblem = 1` means no decomposition; otherwise, it indicates decomposition.
     
     int escape_local_optima = DEFAULT_ELO;            // number of times of escaping local optima
     double destroy_ratio_l = DEFAULT_DESTROY_RATIO_L; //customers to be delete in recombination
@@ -122,19 +122,19 @@ public:
     double alpha = DEFAULT_ALPHA;
     double r = 0.0;
     bool rd_removal_insertion = DEFAULT_RD_R_I;
-    bool individual_search = DEFAULT_INDIVIDUAL_SEARCH;
-    bool population_search = DEFAULT_POPULATION_SEARCH;
-    bool parallel_insertion = DEFAULT_PARALLEL_STATION_INSERTION;
-    bool conservative_local_search = DEFAULT_CONSERVATIVE_LOCAL_SEARCH;
-    bool aggressive_local_search = DEFAULT_AGGRESSIVE_LOCAL_SEARCH;
+    bool individual_search = DEFAULT_INDIVIDUAL_SEARCH; // large neighborhood search
+    bool population_search = DEFAULT_POPULATION_SEARCH; // memetic search
+    bool parallel_insertion = DEFAULT_PARALLEL_STATION_INSERTION; // PSI (SSI is used in CDNS by default)
+    bool conservative_local_search = DEFAULT_CONSERVATIVE_LOCAL_SEARCH; // CLS
+    bool aggressive_local_search = DEFAULT_AGGRESSIVE_LOCAL_SEARCH; // ALS (however, at least one local search should use)
    
 
     std::vector<std::string> small_opts;
     std::vector<std::string> destroy_opts;
     std::vector<std::string> repair_opts;
     Data(ArgumentParser &parser); // read problem files, set parameters
-    Data(const Data& data, std::vector<int> &subproblem);
-    void floydWarshall();
+    Data(const Data& data, std::vector<int> &subproblem); // use to load sub-data to subproblems
+    void floydWarshall(); // the Floyd-Warshall algorithm
     void pre_processing();
     void clear_mem();
     Move& get_mem(std::string &opt, const int &r1, const int &r2);

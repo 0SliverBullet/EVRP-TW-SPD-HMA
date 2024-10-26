@@ -2,7 +2,7 @@
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
-Data::Data(const Data& data, std::vector<int> &subproblem)
+Data::Data(const Data& data, std::vector<int> &subproblem) // main problem to subproblems mapping
 {
     double all_pickup = 0.0;
     double all_delivery = 0.0;
@@ -417,7 +417,6 @@ Data::Data(ArgumentParser &parser)
         {
             printf("%s\n", line.c_str());
             this->node_num = stoi(results[1]);
-            //this->customer_num = stoi(results[1]) - 1;
             std::vector<double> tmp_v_1(this->node_num, 0.0);
             std::vector<bool> tmp_v_2(this->node_num, 0.0);
             std::vector<int> tmp_v_3(this->node_num, 0);
@@ -581,6 +580,12 @@ Data::Data(ArgumentParser &parser)
                     // all_time += t;
                     // if (d < this->min_dist) this->min_dist = d;
                     // if (d > this->max_dist) this->max_dist = d;
+                    /*
+                    
+                    Note that we do not compute all_dist, all_time, this->min_dist, this->max_dist here.
+                    See in this->floydWarshall()
+                    
+                    */
                 }
                 else
                 {
@@ -598,11 +603,29 @@ Data::Data(ArgumentParser &parser)
     }
     fp.close();
 
-    this->floydWarshall();
+    /*
+
+    apply the Floyd-Warshall algorithm to compute the shortest path in terms of travel time between every pair of nodes.
+    make sure that the travel time associated with these new edges naturally satisfies the triangle inequality, 
+    allowing Proposition 1 to hold for any problem instance.
+    
+    */
+
+    this->floydWarshall();  
+
     this->start_time = this->node[this->DC].start;
     this->end_time = this->node[this->DC].end;
     this->all_delivery = all_delivery;
     this->all_pickup = all_pickup;
+
+
+    /*
+   
+    we preprocess the charging stations to rank them for insertion between each pair of nodes. 
+    The ranking metric is the extra cost induced by insertion.
+    To balance efficiency and solution quality, only the top sr·|F| ranked charging stations are considered for insertion in both PSI and SSI
+    
+    */
 
     std::vector<std::vector<int>> tmp_v_4(this->customer_num+this->station_num+1, std::vector<int>(this->station_num, 0));
     for (int i = 0; i <= this->customer_num + this->station_num; i++)
@@ -1028,16 +1051,18 @@ void Data::floydWarshall() {
                 next[i][j] = j;
         }
     }
-    for (int k = this->customer_num+1; k < n; ++k) {   //only permit station as intra-node
+    // only permit station k as intra-node in path from i to j, i.e. station k is not used to recharge
+    for (int k = this->customer_num+1; k < n; ++k) {   
         for (int i = 0; i < n; ++i) {
             for (int j = 0; j < n; ++j) {
                 if (this->time[i][k] + this->time[k][j] < this->time[i][j]) {
-                    this->time[i][j] = this->time[i][k] + this->time[k][j];
+                    this->time[i][j] = this->time[i][k] + this->time[k][j];   // shortest time from i to j
                     next[i][j] = next[i][k];
                 }
             }
         }
     }
+    // record all stations visited but do not recharge in the shortest path from i to j 
     for (int i = 0; i < n; ++i) {
         for (int j = 0; j < n; ++j) {
             std::vector<int> path;
@@ -1050,9 +1075,9 @@ void Data::floydWarshall() {
                 u = next[u][v];
                 if (u != v) path.push_back(u);
             }
-            dist_shortest_t[i][j] = total_dist;
-            this->hyperarc[i][j] = path;
-            this->all_dist += dist_shortest_t[i][j];
+            dist_shortest_t[i][j] = total_dist;   // in terms of shortest time, the path distance from i to j  
+            this->hyperarc[i][j] = path;          // path information, i.e. path = (f_1, f_2, ... f_m),  we have i -> f_1 -> f_2 -> ... -> f_m -> j to replace i -> j, which is the shortest path in terms of time from i to j
+            this->all_dist += dist_shortest_t[i][j];  
             this->all_time += time[i][j];
             if (dist_shortest_t[i][j] < this->min_dist) this->min_dist = dist_shortest_t[i][j];
             if (dist_shortest_t[i][j] > this->max_dist) this->max_dist = dist_shortest_t[i][j];

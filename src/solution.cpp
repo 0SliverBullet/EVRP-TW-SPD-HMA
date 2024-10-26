@@ -6,7 +6,6 @@ void attr_for_one_node(Data &data, int node, Attr &a)
     a.e = node;
     a.dist = 0;
 
-    //if (node == data.DC)
     if (data.node[node].type == 0 || data.node[node].type == 2)
     {
         // depot

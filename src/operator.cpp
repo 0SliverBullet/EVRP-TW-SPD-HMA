@@ -773,12 +773,19 @@ void new_route_insertion(Solution &s, Data &data, int initial_node)
             selected = randint(0, index-1, data.rng);
             first_node = std::get<0>(unrouted[selected]);
         }
-
+        // try to insert the fisrt customer in the route, best station insertion ("sequential_station_insertion" here is without refinement)
         r.temp_node_list = r.node_list;
         r.temp_node_list.insert(r.temp_node_list.begin() + 1, first_node); 
-        flag = 0, new_cost = 0.0, index_negtive_first = -1;
+        flag = 0, new_cost = 0.0, index_negtive_first = -1;  // n_right
         update_route_status(r.temp_node_list, r.status_list, data, flag, new_cost, index_negtive_first);  
-        station_insert_pos.clear();  //need to be optimized, not eligant
+        station_insert_pos.clear();  // need to be optimized, not eligant
+        /*
+        flag == 0 route error
+        flag == 1 feasible
+        flag == 2 capacity violation
+        flag == 3 capacity Ok, but time window violation
+        flag == 4 capacity & time window Ok, but battery violation only     
+        */
         if (flag == 0 || flag == 2 || flag == 3) {  // "flag ==3 -> no solution" holds in the Euclidean plane
             printf("No solution.");
             exit(0);
@@ -789,6 +796,7 @@ void new_route_insertion(Solution &s, Data &data, int initial_node)
         for (int i = 0; i < station_insert_pos.size(); i++){  // the same insertion order
             r.node_list.insert(r.node_list.begin()+ station_insert_pos[i].second, station_insert_pos[i].first); 
         }
+        // try to insert other customer in the same route, using RCRS and best station insertion
         int score_len = 0;
         partial_cost = new_cost;
         while (cal_score(feasible_pos, unrouted, score, unrouted_index, score_len, index, r,
@@ -1354,10 +1362,20 @@ void find_local_optima(Solution &s, Data &data, Solution &s_N)
             // acc_delta_cost += min_delta_cost;
             // printMemoryUsage();
             Solution item = s;
-            tour_id_array = apply_move(item, move_list[best_index], data);
+            /*
+
+            apply an existing local search procedure for VRP-TW-SPD to find the best-improving solution in the neighborhood of s
+            
+            */
+            tour_id_array = apply_move(item, move_list[best_index], data); 
             double ori_cost = s.get(move_list[best_index].r_indice[0]).total_cost;
             if (move_list[best_index].r_indice[1] >= 0) ori_cost += s.get(move_list[best_index].r_indice[1]).total_cost;
             double new_cost = 0.0;
+            /*
+
+            PSSI is first applied to transform it into a feasible EVRP-TW-SPD solution
+
+            */
             for (auto j: tour_id_array) {
                     if (j >= item.len()) {
                         if (move_list[best_index].r_indice[0] < item.len() && move_list[best_index].r_indice[1] < item.len()) ori_cost += s.get(j).total_cost;
@@ -1371,12 +1389,9 @@ void find_local_optima(Solution &s, Data &data, Solution &s_N)
                     int index_negtive_first = -1;
                     update_route_status(r.temp_node_list,r.status_list,data,flag,cost,index_negtive_first); 
                     if (flag == 0 || flag == 2 || flag == 3) return;
-                    // {                 
-                    //     printf("ALS error: route %d, flag = %d\n", j, flag);
-                    //     exit(0);
-                    // }
                     if (flag == 1) { item.get(j).total_cost = item.get(j).cal_cost(data); }
                     if (flag == 4 && ! parallel_sequential_station_insertion(item, r, data, j)) return;
+                    // If this transformation is not possible, then ALS would terminate
                     new_cost += item.get(j).total_cost;
             } 
 
@@ -1396,7 +1411,8 @@ void find_local_optima(Solution &s, Data &data, Solution &s_N)
             std::swap(s, item);   
             s.cost += new_cost - ori_cost;  
             if (s.cost - s_N.cost < -PRECISION){
-                        s_N = s;     
+                        s_N = s;  
+                        // If successful, the resulting feasible solution would replace the current solution s_N when it has better quality 
                         // printf("%.2lf\n", s_N.cost);       
             }
             // update move_list
@@ -1452,6 +1468,7 @@ void find_local_optima(Solution &s, Data &data, Solution &s_N)
             }
         }
         else break;
+        // ALS would terminate when no further improvement is possible
     }
 }
 
@@ -1521,6 +1538,11 @@ void find_local_optima(Solution &s, Data &data, double base_cost)
         {
             // apply move
             std::unordered_set<int> set = {0, 1};
+            /*
+            
+            find the best-improving solution in the EVRP-TW-SPD neighborhood of s
+
+            */
             tour_id_array = apply_move(s, move_list[best_index], data);
             for (int j = 0; j < tour_id_array.size(); j++){
                 if (tour_id_array[j] >= s.len()) continue;
@@ -1599,7 +1621,7 @@ void find_local_optima(Solution &s, Data &data, double base_cost)
     }
 }
 
-void do_local_search(Solution &s, Data &data)  // Cross-Domain Neighborhood Search
+void do_local_search(Solution &s, Data &data)  // Cross-Domain Neighborhood Search (CDNS)
 {
     if (int(data.small_opts.size() == 0))
     {
@@ -1609,6 +1631,12 @@ void do_local_search(Solution &s, Data &data)  // Cross-Domain Neighborhood Sear
     // not using local search
     if (data.escape_local_optima == -1) return;
 
+    // --------------------- remove all stations  ---------------------
+    /*
+        Proposition 1. Given an EVRP-TW-SPD instance, removing
+        all charging stations from a feasible EVRP-TW-SPD solution
+        always results in a feasible VRP-TW-SPD solution.
+    */
     for (int j = 0; j< s.len(); j++ ){
                 Route &r = s.get(j);
                 r.customer_list = r.node_list;
@@ -1656,7 +1684,7 @@ void do_local_search(Solution &s, Data &data)  // Cross-Domain Neighborhood Sear
     }
 
 
-    // --------------------- Aggressive Local Search, may be infeasiable ---------------------
+    // --------------------- Aggressive Local Search (ALS), may be infeasiable to EVRP-TW-SPD---------------------
     
     if (data.aggressive_local_search){
         Solution s_N = s;
@@ -1666,7 +1694,7 @@ void do_local_search(Solution &s, Data &data)  // Cross-Domain Neighborhood Sear
 
     //printf("ALS: %.2lf\n", s.cost);
 
-    // --------------------- Conservative Local Search, must be feasiable ---------------------
+    // --------------------- Conservative Local Search (CLS), must be feasiable to EVRP-TW-SPD---------------------
     if (data.conservative_local_search) {
         double base_cost=s.cost;
         find_local_optima(s, data, base_cost);

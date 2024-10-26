@@ -20,7 +20,7 @@ framework for further automatic algorithm design
 #include "config.h"
 using namespace std;
 
-void search_framework(Data &data, Solution &s, int decomposition_count, clock_t stime0, double update_value);
+void search_framework(Data &data, Solution &s, int level, clock_t stime0, double update_value);
 void decomposition_cluster(vector<Solution> &pop, vector<double> &pop_fit, vector<int> &pop_argrank, Data &data, clock_t stime);
 void initialization(vector<Solution> &pop, vector<double> &pop_fit, vector<int> &pop_argrank, Data &data);
 

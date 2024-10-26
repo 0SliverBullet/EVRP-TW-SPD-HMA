@@ -10,10 +10,10 @@
 /* attribute definition */
 struct status
 {
-    double arr_time;
-    double dep_time; 
-    double arr_RD;
-    double dep_RD;
+    double arr_time;  // arrival time 
+    double dep_time;  // departure time
+    double arr_RD;    // when arrival, the maximum remaining distance that EV can reach
+    double dep_RD;    // when departure, the maximum remaining distance that EV can reach
 };
 struct Attr
 {
@@ -246,8 +246,6 @@ public:
             else{  //station
             sl[i].arr_RD = sl[i-1].dep_RD - data.dist[pre_node][node];   
             if (sl[i].arr_RD < -PRECISION) {
-                // If this insertion violates constraints, 
-                // we try the next highest-ranked station until a feasible insertion is found or all stations within the selection range have been attempted.
                 int flag = 4;
                 for (int k=1;k<data.station_range;k++) {
                     node = data.optimal_staion[pre_node][nl[i+1]][k];
@@ -276,8 +274,6 @@ public:
             sl[i].dep_RD = std::max(f_f0_dist,sl[i].arr_RD); 
             
             if (data.max_distance_reachable - sl[i].dep_RD < -PRECISION) { 
-                // If this insertion violates constraints, 
-                // we try the next highest-ranked station until a feasible insertion is found or all stations within the selection range have been attempted.
                 int flag = 4;
                 for (int k=1;k<data.station_range;k++) {
                     node = data.optimal_staion[pre_node][nl[i+1]][k];
@@ -305,8 +301,6 @@ public:
                     return nodes;
                 }
             }
-
-            //sl[i].dep_RD = std::min(sl[i].dep_RD,data.max_distance_reachable); 
             
             double max_recharge_time = (sl[i].dep_RD - sl[i].arr_RD) * data.vehicle.consumption_rate * data.vehicle.recharging_rate;
             time += data.time[pre_node][node]; 
@@ -317,7 +311,6 @@ public:
             j = i;
             do{
                 j++;
-                //f_f0_dist += data.dist[nl[j-1]][nl[j]];
                 move_time += data.time[nl[j-1]][nl[j]];
                 if (move_time - data.node[nl[j]].start < -PRECISION){
                         double additional_charge_time = std::min(min_remain_time, data.node[nl[j]].start - move_time);

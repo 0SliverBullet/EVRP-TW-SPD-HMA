@@ -72,18 +72,20 @@ int main(int argc, char **argv)
     parser.addArgument("--bks", 1);
     parser.addArgument("--random_seed", 1);
 
-    parser.addArgument("--individual_search");
-    parser.addArgument("--population_search");
-    parser.addArgument("--parallel_insertion");
-    parser.addArgument("--conservative_local_search");
-    parser.addArgument("--aggressive_local_search");
-    parser.addArgument("--station_range", 1);
-    parser.addArgument("--subproblem_range", 1);
+    parser.addArgument("--individual_search"); 
+    parser.addArgument("--population_search"); 
+    parser.addArgument("--parallel_insertion"); 
+    parser.addArgument("--conservative_local_search"); 
+    parser.addArgument("--aggressive_local_search"); 
+    parser.addArgument("--station_range", 1); 
+    parser.addArgument("--subproblem_range", 1); 
 
     // parse the command-line arguments - throws if invalid format
     parser.parse(argc, argv);
+    // Load data and preprocess
     Data data(parser);
-    search_framework(data, best_s, 1, -1, -1);
+    // Hybrid Memetic Search (HMA)
+    search_framework(data, best_s, 1, -1, -1); 
 
     return 0;
 }

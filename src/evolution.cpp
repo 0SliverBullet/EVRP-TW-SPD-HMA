@@ -7,7 +7,7 @@ Genetic Algorithm for Parallel Station Insertion
 #include <vector>
 #include <algorithm>
 
-int MAXITERA = 5;
+int MAXITERA = 5;  // B = 5
 int POPSIZE;
 double DELTA;
 
@@ -105,15 +105,16 @@ bool evolution(int &dimension, Route &r, Data &data) {
         int p2 = randint(0, POPSIZE - 1, data.rng);
         
         for (int j = 0; j < dimension; ++j) {
-            individual[POPSIZE].x[j] = individual[p1].x[j] ^ individual[p2].x[j];
             // crossover 
+            individual[POPSIZE].x[j] = individual[p1].x[j] ^ individual[p2].x[j];
+            // mutation
             if (rand(0, 1, data.rng) < 0.02) {
                 individual[POPSIZE].x[j] ^= 1;
             }
             if (individual[POPSIZE].x[j] == 1 && rand(0, 1, data.rng) < 0.2) {
                 individual[POPSIZE].x[j] = 0;
             }
-            // mutation
+            
         }
 
         if (!check_adjustment(dimension, r, data, POPSIZE)) {
@@ -134,8 +135,8 @@ bool evolution(int &dimension, Route &r, Data &data) {
 
 bool parallel_station_insertion(int &dimension, Route &r, Data &data, double &evolution_cost) {
     
-    POPSIZE = dimension * 3;
-    DELTA = POPSIZE * MAXITERA;
+    POPSIZE = dimension * 3;      // alpha = 3
+    DELTA = POPSIZE * MAXITERA;   // break out PSI if it is always infeasible
 
     if (!initialization(dimension, r, data)) return false;
 

@@ -59,6 +59,7 @@ void chk_nl_node_pos_O_n(std::vector<int> &nl, int inserted_node, int pos, Data 
 void chk_nl_node_pos_O_n(std::vector<int> &nl, int inserted_node, int pos, Data &data, int &flag, double &cost)
 {   // suppose insert into the pos
     // also check battery constrain
+    // this function contains Charge Amount Calculation without station adjustment
     int len = int(nl.size());
     double capacity = data.vehicle.capacity;
     double distance = 0.0;
@@ -203,7 +204,7 @@ void chk_nl_node_pos_O_n(std::vector<int> &nl, int inserted_node, int pos, Data 
                     flag = 3; return;
                 }       
                 min_remain_time = std::min (min_remain_time, data.node[nl[j]].end-move_time);
-                if (min_remain_time == 0) break;  //扫描结束时 min_remain_time 可能 > 0
+                if (min_remain_time == 0) break;  // when finished, min_remain_time might > 0
                 move_time = std::max(move_time, data.node[nl[j]].start) + data.node[nl[j]].s_time;  
                 if_inserted = false;
             }         
@@ -231,6 +232,8 @@ void update_route_status(std::vector<int> &nl, std::vector<status> &sl, Data &da
     flag == 2 capacity violation
     flag == 3 capacity Ok, but time window violation
     flag == 4 capacity & time window Ok, but battery violation only
+
+    this function contains Charge Amount Calculation without station adjustment
     */
     int len = int(nl.size());
 
@@ -272,8 +275,10 @@ void update_route_status(std::vector<int> &nl, std::vector<status> &sl, Data &da
 
         else{  //station
         sl[i].arr_RD = sl[i-1].dep_RD - data.dist[pre_node][node];   
-        if (sl[i].arr_RD < -PRECISION) {flag = 4; index_negtive_first = i; return;}
-        //update sl[i].dep_RD:
+        if (sl[i].arr_RD < -PRECISION) {flag = 4; index_negtive_first = i; return;}  //electricity-infeasible
+        // update sl[i].dep_RD, i.e., Charge Amount Calculation.
+
+        // 1. the minimal charge amount required to reach the next station f or depot 0, i.e. q_{f_i, 0}
         double f_f0_dist=0;
         int j = i;
         do{
@@ -281,30 +286,50 @@ void update_route_status(std::vector<int> &nl, std::vector<status> &sl, Data &da
             f_f0_dist += data.dist[nl[j-1]][nl[j]];
         } while (data.node[nl[j]].type == 1);
 
+        // Y_{n_i} will not smaller than y_{n_i}. Here sl[i].dep_RD = Y_{n_i} / h 
         sl[i].dep_RD = std::max(f_f0_dist,sl[i].arr_RD);  
         
         sl[i].dep_RD = std::min(sl[i].dep_RD,data.max_distance_reachable); 
+        
+        // 2. the additional charge amount q_{f_i, 1}
+        /*
+        aims to 
+        (1) minimize waiting time by utilizing any available slack time for additional charging.
+        (2) does not affect the arrival time at the next station afther determing q_{f_i, 0}
+        this recursive calculation is O(m_i), faster than O((m_i)^2)
+        */
+        double max_recharge_time = (sl[i].dep_RD - sl[i].arr_RD) * data.vehicle.consumption_rate * data.vehicle.recharging_rate; 
+        // (max_recharge_time / g) is q_{f_i} in our paper
+        // (sl[i].dep_RD - sl[i].arr_RD) * data.vehicle.consumption_rate is q_{f_i, 0} in our paper
 
-        double max_recharge_time = (sl[i].dep_RD - sl[i].arr_RD) * data.vehicle.consumption_rate * data.vehicle.recharging_rate;
-
-        double min_remain_time = double(INFINITY);
-        double move_time = sl[i].arr_time + max_recharge_time; 
+        double min_remain_time = double(INFINITY);                                                                               
+        // min_remain_time is τ_{i,j} in our paper
+        /*
+        the potential available time that can be used to charge when leaving c_{i,j} while satisfying all previous time window constraints.
+        */
+        double move_time = sl[i].arr_time + max_recharge_time;                                                                   
+        // move_time is equivalent to both a′_{c_{i,j}} and b′_{c_{i,j}}
         j = i;
         do{
             j++;
-            move_time += data.time[nl[j-1]][nl[j]];
+            move_time += data.time[nl[j-1]][nl[j]]; // temporely arrival time a′_{c_{i,j}} = b'_{c_{i,j}} + t_{c_{i. j-1}c_{i, j}}
+            // check if there is δ_{i,j} > 0 to use 
             if (move_time - data.node[nl[j]].start < -PRECISION){
-                    double additional_charge_time = std::min(min_remain_time, data.node[nl[j]].start - move_time);
-                    max_recharge_time += additional_charge_time;
-                    move_time += additional_charge_time;
-                    min_remain_time -= additional_charge_time;
+                    double additional_charge_time = std::min(min_remain_time, data.node[nl[j]].start - move_time);   // δ_{i,j} should not be larger than τ_{i,j−1}           
+                    // additional_charge_time is δ_{i,j} in our paper 
+                    /*
+                    the slack time that can be used to charge due to waiting before starting service at c_{i,j}
+                    */
+                    max_recharge_time += additional_charge_time;  // Note that here we let (g*q_{f_i}) += δ_{i,j} directly
+                    move_time += additional_charge_time;          // updated arrival time: move_time = a′_{c_{i,j}} + δ_{i,j} here
+                    min_remain_time -= additional_charge_time;    // is equivalent to τ_{i,j−1} - δ_{i,j} here
             }
-            if (data.node[nl[j]].end - move_time < -PRECISION){
+            if (data.node[nl[j]].end - move_time < -PRECISION){   // report that q_{f_i, 0} results in time windows violation prematurely
                 flag = 3; return;
             }             
-            min_remain_time = std::min (min_remain_time, data.node[nl[j]].end-move_time);
-            if (min_remain_time == 0 ) break;
-            move_time = std::max(move_time, data.node[nl[j]].start) + data.node[nl[j]].s_time;
+            min_remain_time = std::min (min_remain_time, data.node[nl[j]].end-move_time);  //  is equivalent to τ_{i,j} = min{τ_{i,j−1}, l_{c_{i,j}} − a′_{c_{i,j}}} − δ_{i,j}
+            if (min_remain_time == 0 ) break;    // the recursive equations can terminate prematurely since the potential available time is 0
+            move_time = std::max(move_time, data.node[nl[j]].start) + data.node[nl[j]].s_time;  // b'_{c_{i,j}} = max{e_{c_{i, j}}, a′_{c_{i,j}} + δ_{i,j}} + s_{c_{i, j}}
         } while (data.node[nl[j]].type == 1);
         
         sl[i].dep_RD = std::min(max_recharge_time / data.vehicle.recharging_rate / data.vehicle.consumption_rate + sl[i].arr_RD, data.max_distance_reachable);
@@ -333,6 +358,8 @@ void update_route_status(bool &evolution, std::vector<int> &nl, std::vector<stat
     flag == 2 capacity violation
     flag == 3 capacity Ok, but time window violation
     flag == 4 capacity & time window Ok, but battery violation only
+
+    // this function contains Charge Amount Calculation with station adjustment
     */
     /* time complexity O(n) */
     int len = int(nl.size());
@@ -377,7 +404,12 @@ void update_route_status(bool &evolution, std::vector<int> &nl, std::vector<stat
         else{  //station
         sl[i].arr_RD = sl[i-1].dep_RD - data.dist[pre_node][node];   
         if (sl[i].arr_RD < -PRECISION) {
-            //尝试换充电站
+            // If the battery state on arrival at this station is negative
+            /*
+            we try the next highest-ranked station until
+            a feasible insertion is found or all stations within the selection
+            range have been attempted.
+            */
             flag = 4;
             for (int k=1;k<data.station_range;k++) {
                   node = data.optimal_staion[pre_node][nl[i+1]][k];
@@ -401,7 +433,12 @@ void update_route_status(bool &evolution, std::vector<int> &nl, std::vector<stat
         sl[i].dep_RD = std::max(f_f0_dist,sl[i].arr_RD);  
         
         if (data.max_distance_reachable - sl[i].dep_RD < -PRECISION) { 
-            //尝试换充电站
+            // or the full recharging can not guarantee the EV reaches the next station,
+            /*
+            we try the next highest-ranked station until
+            a feasible insertion is found or all stations within the selection
+            range have been attempted.
+            */
             flag = 4;
             for (int k=1;k<data.station_range;k++) {
                   node = data.optimal_staion[pre_node][nl[i+1]][k];
@@ -423,8 +460,6 @@ void update_route_status(bool &evolution, std::vector<int> &nl, std::vector<stat
             }
             if (flag == 4) {index_negtive_first = i; return; }
         }
-
-        //sl[i].dep_RD = std::min(sl[i].dep_RD,data.max_distance_reachable); 
         
         double max_recharge_time = (sl[i].dep_RD - sl[i].arr_RD) * data.vehicle.consumption_rate * data.vehicle.recharging_rate;
         time += data.time[pre_node][node]; 
@@ -616,10 +651,11 @@ bool eval_move(Solution &s, Move &m, Data &data, double &base_cost)
 
     if (m.delta_cost < -PRECISION) {
 
-        if (base_cost == -1) return true; //use Aggressive Local Search (ALS) 
+        if (base_cost == -1) return true; //use Aggressive Local Search (ALS); do not electricity constraints 
 
-        //else use Conservative Local Search
-           
+        // else use Conservative Local Search (CLS)
+        // addtionally check if electricity is feasible  
+        // find the improved solution in the EVRP-TW-SPD neighborhood
         Solution item = s;
         std::vector<int> tour_id_array;
         //clock_t stime1 = clock();
@@ -662,11 +698,12 @@ bool eval_move(Solution &s, Move &m, Data &data, double &base_cost)
     return false;
 }
 
-bool parallel_sequential_station_insertion(Solution &item, Route &r, Data &data, int &j){
-    double evolution_cost=double(INFINITY);
-    double heuristic_cost=double(INFINITY);
+bool parallel_sequential_station_insertion(Solution &item, Route &r, Data &data, int &j){  // parallel sequential station insertion (PSSI)
+    double evolution_cost=double(INFINITY);  
+    double heuristic_cost=double(INFINITY); 
     int dimension=r.customer_list.size()-1;
     //clock_t stime1 = clock();
+    // ----------------------------- parallel station insertion (PSI) -----------------------------------------------------
     if (data.parallel_insertion) parallel_station_insertion(dimension,r,data,evolution_cost);
     //double used_sec1 = (clock() - stime1) / (CLOCKS_PER_SEC*1.0);
     item.get(j).node_list = r.node_list;
@@ -679,11 +716,14 @@ bool parallel_sequential_station_insertion(Solution &item, Route &r, Data &data,
     station_insert_pos.clear();            
     //clock_t stime2 = clock();
     //double used_sec2 = 0.0;
-    if (sequential_station_insertion(flag, index_negtive_first, r, data, station_insert_pos, heuristic_cost)){
-        
+     
+    // ----------------------------- sequential station insertion (SSI) -----------------------------------------------------
+    if (sequential_station_insertion(flag, index_negtive_first, r, data, station_insert_pos, heuristic_cost)){  
+        // best station insertion
         for (int i=0; i<station_insert_pos.size(); i++){
                     r.customer_list.insert(r.customer_list.begin()+ station_insert_pos[i].second, station_insert_pos[i].first); 
         }
+        // SSI procedure includes an additional refinement step: improve consecutive stations in route
         if (r.customer_list.size() >= 4) sequential_station_improvement(heuristic_cost, data, r);
      
     }
@@ -704,7 +744,7 @@ bool parallel_sequential_station_insertion(Solution &item, Route &r, Data &data,
     return true;
 }
 
-void sequential_station_improvement(double &cost, Data &data, Route &r){
+void sequential_station_improvement(double &cost, Data &data, Route &r){ // refinement step: improve consecutive stations in route
     int flag = 0, j, k, check = 0;
     double new_cost = 0.0, previous_cost = cost;
     int index_negtive_first = -1;
@@ -715,10 +755,14 @@ void sequential_station_improvement(double &cost, Data &data, Route &r){
             second_node = r.customer_list[j+1];
             third_node = r.customer_list[j+2];
             if (data.node[second_node].type == 2){   
-            //improve r by adjusting the station fk in (c, fk, fj ), (fi, fk, c), (fi, fk, fj ) pattern;
+            //improve r by adjusting the station f_k in the previous result with (c, f_k, f_j ), (f_i, f_k, c), (f_i, f_k, fj ) pattern;
                     if (data.node[first_node].type ==2 || data.node[third_node].type ==2 ){  
                             for (k=0; k<data.station_range;k++){
                                 //printf("%d, %d -> %d, %d\n",first_node,second_node,data.optimal_staion[first_node][third_node][k],third_node);
+                                /*
+                                we attempt to replace them with stations based on the preprocessed rankings,
+                                starting from the highest-ranked to lower-ranked stations.
+                                */
                                 if (data.optimal_staion[first_node][third_node][k] == second_node) break;
                                         n_l[j+1] = data.optimal_staion[first_node][third_node][k];
                                         r.temp_node_list=n_l;
@@ -741,7 +785,7 @@ void sequential_station_improvement(double &cost, Data &data, Route &r){
                                         else continue; 
                                         }
                                         
-                                        if (new_cost-previous_cost<-PRECISION)  {
+                                        if (new_cost-previous_cost<-PRECISION)  { // If an improvement is found, the replacement is made.
                                             //printf("%d, %d -> %d, %d: %.2lf\n",first_node,second_node,data.optimal_staion[first_node][third_node][k],third_node, new_cost-pre_cost);
                                             cost = new_cost;
                                             r.customer_list = n_l;
@@ -849,6 +893,7 @@ std::vector<int> apply_move(Solution &s, Move &m, Data data)
     return r_indice;
 }
 
+// "sequential_station_insertion" is implememtation of Best Station Insertion, i.e. w/o refinement
 bool sequential_station_insertion(int &flag, int &index_negtive_first, Route &r, Data &data, std::vector<std::pair<int,int>> &station_insert_pos,double &heuristic_cost){
     std::vector<double> score(MAX_STATION_POINT);
     std::vector<int> score_argrank(MAX_STATION_POINT);
@@ -858,7 +903,7 @@ bool sequential_station_insertion(int &flag, int &index_negtive_first, Route &r,
     bool station_pos_type = false;  
     double new_cost = 0.0;
     while (flag == 4){
-            int index_last_f0 = index_negtive_first;
+            int index_last_f0 = index_negtive_first;  // n_left is init as n_right
             do {
               index_last_f0--;
             }while (data.node[r.temp_node_list[index_last_f0]].type == 1);
@@ -950,13 +995,13 @@ bool cal_score_station(bool type, std::vector<int> &feasible_pos, std::vector<in
             }
             else chk_nl_node_pos_O_n(r.temp_node_list, i, pos, data, flag, cost); 
             if (flag == 1) {
-                feasible_pos[i*MAX_NODE_IN_ROUTE+pos] = 1;
+                feasible_pos[i*MAX_NODE_IN_ROUTE+pos] = 1;  //electricity-feasible
                 count1++;
             }else if (flag ==4){
-                feasible_pos[i*MAX_NODE_IN_ROUTE+pos] = 4;
+                feasible_pos[i*MAX_NODE_IN_ROUTE+pos] = 4;  //still electricity-infeasible
                 count4++;
             }else {
-                feasible_pos[i*MAX_NODE_IN_ROUTE+pos] = 0;
+                feasible_pos[i*MAX_NODE_IN_ROUTE+pos] = 0;  //other infeasible
             }            
           }
     }

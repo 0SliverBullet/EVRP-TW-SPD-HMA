@@ -16,13 +16,13 @@ EVRP-TW-SPD-HMA-code-dataset/
 ├── README.md                   # overview and instructions
 │
 ├── src/                        # HMA source code 
-│   └── evrp_tw_spd_solver.cpp  # main function 
-│   └── evrp_tw_spd_solver.h   
+│   ├── evrp_tw_spd_solver.cpp  # main function 
+│   ├── evrp_tw_spd_solver.h   
 │   └── ...  
 │
 ├── data/                       # datasets used in our experiments
 │   ├── akb_instances           # the akb set
-│   └── jd_instances            # the jd set (the new benchmark set)
+│   ├── jd_instances            # the jd set (the new benchmark set)
 │   └── README.md               # instance file structure
 │
 ├── solution/                   # solutions obtained in 10 independent runs
