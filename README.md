@@ -28,11 +28,11 @@ EVRP-TW-SPD-HMA-code-dataset/
 ├── solution/                   # solutions obtained in 10 independent runs
 │   ├── akb
 │   ├── jd/
-|   |   ├── small_timelimit
-|   |   └── large_timelimit
-|   |
+│   │   ├── small_timelimit
+│   │   └── large_timelimit
+│   │
 │   └── README.md               # solution file structure
-|
+│
 └── .gitattributes        
 ```
 
