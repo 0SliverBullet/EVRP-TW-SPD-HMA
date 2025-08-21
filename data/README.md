@@ -11,6 +11,11 @@ The benchmark contains both the *akb* set and the *jd* set.
 
 - **the *jd* set**: a new benchmark set derived from JD Logistics’ distribution system. We generated instances with 200, 400, 600, 800, and 1000 customers, each with 100 stations. For each problem scale, we generated 4 instances, resulting in a set of 20 large scale instances, e.g., `jd200_1.txt` is the 200-customer instance.
 
+Example: instance `jd1000_1`:
+
+![jd1000_1](../image/example_instance_jd1000_1.png)
+
+
 ## Instance File Structure 
 
 Note that the corresponding variables in our paper follow "i.e.,".
